@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About P.R.O.P.H.E.T</title> <!-- Updated Title -->
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --bg-color: #ecf0f1;
+            --text-color: #2c3e50;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        /* --- Header Style (Similar to index.html) --- */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        h1 {
+            color: var(--primary-color);
+            margin: 0;
+            font-size: 1.8em;
+        }
+        nav a {
+            text-decoration: none;
+            color: var(--secondary-color);
+            font-weight: bold;
+            margin-left: 15px;
+        }
+        nav a:hover {
+            text-decoration: underline;
+        }
+        /* --- End Header Style --- */
+        
+        h2, h3, h4 {
+            color: var(--primary-color);
+        }
+        p {
+            line-height: 1.6;
+        }
+        ul, ol {
+            line-height: 1.6;
+        }
+        .logo {
+            font-size: 2em;
+            text-align: center;
+            margin: 20px 0;
+        }
+        .section {
+            margin-bottom: 30px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+        /* --- New Styles for Prediction Explanation --- */
+        .prediction-example {
+            background-color: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        .prediction-item {
+            margin-bottom: 10px;
+        }
+        .prediction-item strong {
+            color: var(--primary-color);
+        }
+        .key-point {
+            font-weight: bold;
+            color: var(--secondary-color);
+        }
+        /* --- End New Styles --- */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header with Navigation -->
+        <header>
+            <h1>🔮 P.R.O.P.H.E.T</h1> <!-- Updated H1 -->
+            <nav>
+                <a href="index.html">Predictor</a>
+                <a href="about.html">About</a> <!-- Link to About Page -->
+            </nav>
+        </header>
+
+        <div class="logo">🔮</div>
+
+        <div class="section">
+            <h2>About P.R.O.P.H.E.T</h2>
+            <p>
+                <strong>P.R.O.P.H.E.T</strong> stands for <strong>Probabilistic Realtime Optimizer for Price Historical Evaluation & Trading</strong>. It is an advanced algorithmic tool designed to forecast potential future market turning points, known as swing highs and swing lows, for various cryptocurrency trading pairs.
+            </p>
+            <p>
+                Unlike traditional predictors, P.R.O.P.H.E.T does not claim to predict the future with certainty. Instead, it identifies <strong>high-probability zones</strong> where the market is statistically more likely to experience a significant shift in momentum based on current and historical price action.
+            </p>
+        </div>
+
+        <div class="section">
+            <h3>How It Works</h3>
+            <p>
+                P.R.O.P.H.E.T employs a sophisticated Multi-TimeFrame (MTF) analysis engine:
+            </p>
+            <ul>
+                <li><strong>Data Aggregation:</strong> Fetches real-time OHLCV (Open, High, Low, Close, Volume) data from leading exchanges like Binance for specified trading pairs.</li>
+                <li><strong>Swing Detection:</strong> Identifies significant price swings (peaks and troughs) on both the 1-Day (1D) and 1-Hour (1H) timeframes. It classifies these swings into Higher Highs (HH), Lower Highs (LH), Higher Lows (HL), and Lower Lows (LL) to understand the market's current trend structure.</li>
+                <li><strong>Indicator Analysis:</strong> Calculates key technical indicators such as the Relative Strength Index (RSI) and Moving Average Convergence Divergence (MACD) to gauge momentum and potential divergences.</li>
+                <li><strong>Fibonacci Confluence:</strong> Applies Fibonacci retracement and extension techniques to project potential support and resistance levels based on recent significant price moves identified on the 1D and 1H charts.</li>
+                <li><strong>Trendline Construction:</strong> Dynamically plots support and resistance trendlines by connecting recent significant swing points (e.g., connecting Higher Lows for an uptrend support line).</li>
+                <li><strong>Confluence Scoring:</strong> The core of P.R.O.P.H.E.T. It evaluates potential future price levels by seeking confluence, where multiple technical factors align. A high-confluence zone is one where:
+                    <ul>
+                        <li>A Fibonacci level coincides with a dynamic trendline.</li>
+                        <li>Price action patterns (like pin bars) form near these levels.</li>
+                        <li>Momentum indicators show signs of divergence or confirmation.</li>
+                    </ul>
+                </li>
+                <li><strong>Prediction Generation:</strong> Based on the trend context (uptrend, downtrend) and the strength of confluence at various levels, P.R.O.P.H.E.T ranks and outputs the 3 most probable price levels for the next significant swing high and the 3 most probable levels for the next significant swing low, targeting a 3 to 7-day horizon.</li>
+            </ul>
+        </div>
+
+        <!-- NEW SECTION: Understanding the Predictions -->
+        <div class="section">
+            <h3>Understanding the Predictions</h3>
+            <p>
+                When P.R.O.P.H.E.T generates a prediction, it presents a list of potential future swing highs and swing lows. Each potential level comes with specific details to help you understand its significance. Here's a breakdown of what each component means:
+            </p>
+
+            <div class="prediction-example">
+                <h4>Example Prediction Item:</h4>
+                <div class="prediction-item"><strong>Level:</strong> 62500.00</div>
+                <div class="prediction-item"><strong>Source:</strong> 1D_Extension - Ext_127</div>
+                <div class="prediction-item"><strong>Score:</strong> 10</div>
+            </div>
+
+            <h4><span class="key-point">Level</span></h4>
+            <p>
+                This is the calculated price point where P.R.O.P.H.E.T believes a significant market reaction (a swing high or low) is most likely to occur in the next 3-7 days. This level is derived from the confluence of various technical factors.
+            </p>
+
+            <h4><span class="key-point">Source</span></h4>
+            <p>
+                This field describes the <strong>primary technical basis</strong> for the predicted level. It tells you which analytical tool and timeframe contributed most significantly to identifying this price zone.
+            </p>
+            <ul>
+                <li>
+                    <strong>Format:</strong> <code>TimeFrame_AnalysisType - SpecificSignal</code>
+                    <ul>
+                        <li><strong>TimeFrame:</strong> The chart timeframe the analysis is based on (e.g., <code>1D</code> for 1-Day, <code>1H</code> for 1-Hour).</li>
+                        <li><strong>AnalysisType:</strong> The kind of technical analysis used.
+                            <ul>
+                                <li><code>Extension</code>: Fibonacci Projection. Indicates a potential price target beyond the initial measured move.</li>
+                                <li><code>Retracement</code>: Fibonacci Correction. Indicates a potential support/resistance level within a corrective wave.</li>
+                                <li><code>Fib</code>: A Fibonacci level derived from a shorter-term move (common on 1H).</li>
+                            </ul>
+                        </li>
+                        <li><strong>SpecificSignal:</strong> The exact signal or level identified.
+                            <ul>
+                                <li>For <code>Extension</code>, it's the Fibonacci ratio (e.g., <code>Ext_127</code> means 127.2% extension).</li>
+                                <li>For <code>Retracement</code>, it's the Fibonacci ratio (e.g., <code>Retr_61.8</code> means 61.8% retracement).</li>
+                                <li>For <code>Fib</code>, it's the ratio (e.g., <code>1h_Fib_78.6</code> means 78.6% level on the 1-hour chart).</li>
+                            </ul>
+                        </li>
+                    </ul>
+                </li>
+                <li>
+                    <strong>Examples:</strong>
+                    <ul>
+                        <li><code>1D_Extension - Ext_127</code>: This level is a major target identified by projecting the size of a large 1-Day trend move. The 127.2% Fibonacci extension is a common target for the end of a strong impulse wave.</li>
+                        <li><code>1D_Retracement - Retr_61.8</code>: This level is a key support/resistance area identified by applying the 61.8% Fibonacci retracement to a significant 1-Day price move. This is often where corrective waves find temporary equilibrium.</li>
+                        <li><code>1H_Fib - 1h_Fib_78.6</code>: This level comes from a shorter-term Fibonacci analysis on the 1-Hour chart. It might act as interim support/resistance within the broader 1-Day context.</li>
+                    </ul>
+                </li>
+            </ul>
+
+            <h4><span class="key-point">Score</span></h4>
+            <p>
+                This numerical value represents the <strong>relative strength or confidence</strong P.R.O.P.H.E.T has in this particular prediction level. The score is calculated based on the number and quality of confluencing technical factors.
+            </p>
+            <ul>
+                <li><strong>Higher Score = Higher Confidence:</strong> A level with a score of 10 is considered a very strong candidate. It typically means multiple high-quality signals from significant timeframes (like 1D) align at or near this price.</li>
+                <li><strong>Scoring Logic (Simplified):</strong>
+                    <ol>
+                        <li><strong>Base Score:</strong> Assigned based on the <em>Source</em>.
+                            <ul>
+                                <li>Major 1D Projection (e.g., <code>1D_Extension</code>): Base 8</li>
+                                <li>Major 1D Correction (e.g., <code>1D_Retracement</code>): Base 6</li>
+                                <li>Short-term 1H Signal (e.g., <code>1H_Fib</code>): Base 4</li>
+                            </ul>
+                        </li>
+                        <li><strong>Bonuses:</strong> Extra points are added based on context.
+                            <ul>
+                                <li>If the level aligns with the expected type of next swing (e.g., a high level in a downtrend where a bounce is expected): <strong>+2 bonus</strong>.</li>
+                                <li>If it's a particularly important Fibonacci level (like 61.8%): <strong>+1 or +2 bonus</strong>.</li>
+                            </ul>
+                        </li>
+                    </ol>
+                </li>
+                <li>
+                    <strong>Interpretation:</strong>
+                    <ul>
+                        <li><strong>Score 10:</strong> Extremely high confidence. Strong confluence of major signals.</li>
+                        <li><strong>Score 8-9:</strong> High confidence. Significant confluence.</li>
+                        <li><strong>Score 6-7:</strong> Moderate confidence. Some confluence or a strong single signal.</li>
+                        <li><strong>Score 4-5:</strong> Lower confidence. Possibly a single strong short-term signal.</li>
+                    </ul>
+                </li>
+            </ul>
+            <p>
+                <strong>In Summary:</strong> When evaluating a prediction, look for levels with the <strong>highest scores</strong> and pay attention to their <strong>Sources</strong>. A level at 62500 with a <code>Score: 10</code> and <code>Source: 1D_Extension - Ext_127</code> is a much stronger signal than a level at 61000 with a <code>Score: 6</code> and <code>Source: 1H_Fib - 1h_Fib_38.2</code>.
+            </p>
+        </div>
+        <!-- END NEW SECTION -->
+
+        <div class="section">
+            <h3>Disclaimer</h3>
+            <p>
+                <strong>P.R.O.P.H.E.T is for informational and educational purposes only.</strong> It is not financial advice. Cryptocurrency markets are extremely volatile and influenced by numerous unpredictable factors. Past performance is not indicative of future results.
+            </p>
+            <p>
+                <strong>Risk Warning:</strong> Trading cryptocurrencies involves substantial risk of loss. Never trade money you cannot afford to lose. The predictions generated by P.R.O.P.H.E.T are based on technical analysis and historical data patterns. They are probabilistic estimates and should not be relied upon as guaranteed outcomes. Always conduct your own research and consider seeking advice from qualified financial professionals before making any investment decisions.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>P.R.O.P.H.E.T &copy; 2025 - All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
