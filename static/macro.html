@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <!-- Updated CSP to allow connections to FRED API (though now handled by backend) and Chart.js CDN -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; connect-src 'self' https://api.stlouisfed.org;">
+    <title>Macro Data - P.R.O.P.H.E.T</title>
+    <style>
+        :root {
+            --primary-color: #2c3e50;
+            --secondary-color: #3498db;
+            --success-color: #2ecc71;
+            --warning-color: #f39c12;
+            --error-color: #e74c3c;
+            --bg-color: #ecf0f1;
+            --text-color: #2c3e50;
+            --border-color: #bdc3c7;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1000px; /* Slightly wider for charts */
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        /* --- Header Style (Copied from index.html) --- */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        h1 {
+            color: var(--primary-color);
+            margin: 0;
+            font-size: 1.8em;
+        }
+        nav a {
+            text-decoration: none;
+            color: var(--secondary-color);
+            font-weight: bold;
+            margin-left: 15px;
+        }
+        nav a:hover {
+            text-decoration: underline;
+        }
+        /* --- End Header Style --- */
+
+        h2 {
+            color: var(--primary-color);
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+            margin-top: 30px;
+        }
+        .chart-container {
+            position: relative;
+            height: 400px; /* Adjust height as needed */
+            margin-bottom: 30px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+            background-color: #fafafa;
+        }
+        .loading-message, .error-message {
+            text-align: center;
+            padding: 20px;
+            font-style: italic;
+        }
+        .loading-message {
+            color: #555;
+        }
+        .error-message {
+            color: var(--error-color);
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 4px;
+        }
+        .data-source-info {
+            font-size: 0.85em;
+            color: #666;
+            text-align: right;
+            margin-top: -10px;
+            margin-bottom: 20px;
+        }
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            padding-top: 15px;
+            border-top: 1px solid #eee;
+            color: #7f8c8d;
+            font-size: 0.9em;
+        }
+
+        /* --- Responsive Improvements for Charts --- */
+        @media (max-width: 768px) {
+            .container {
+                padding: 15px;
+            }
+            .chart-container {
+                height: 300px; /* Smaller height on mobile */
+            }
+            h1 {
+                font-size: 1.5em;
+            }
+        }
+        /* --- End UI/UX Enhancements CSS --- */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header with Navigation -->
+        <header>
+            <h1>🔮 P.R.O.P.H.E.T - Market Insights</h1>
+            <nav>
+                <a href="index.html">Predictor</a>
+                <a href="about.html">About</a>
+                <a href="macro.html">Macro Data</a> <!-- Link to this new page -->
+            </nav>
+        </header>
+
+        <h2>US Consumer Price Index (CPI)</h2>
+        <div class="data-source-info">Source: FRED (Federal Reserve Economic Data)</div>
+        <div class="chart-container">
+            <canvas id="cpiChart"></canvas>
+            <div id="cpiMessage" class="loading-message">Loading CPI data...</div>
+        </div>
+
+        <h2>US Producer Price Index (PPI)</h2>
+        <div class="data-source-info">Source: FRED (Federal Reserve Economic Data)</div>
+        <div class="chart-container">
+            <canvas id="ppiChart"></canvas>
+            <div id="ppiMessage" class="loading-message">Loading PPI data...</div>
+        </div>
+
+        <footer>
+            <p>P.R.O.P.H.E.T &copy; 2025 - Macro Data provided by FRED</p>
+        </footer>
+    </div>
+
+    <!-- Include Chart.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script>
+        // --- Configuration ---
+        const API_BASE_URL = ""; // Use relative path if served by FastAPI
+
+        // --- Utility Functions ---
+        function showCpiMessage(message, isError = false) {
+            const messageDiv = document.getElementById('cpiMessage');
+            messageDiv.textContent = message;
+            messageDiv.className = isError ? 'error-message' : 'loading-message';
+            messageDiv.style.display = 'block';
+        }
+
+        function showPpiMessage(message, isError = false) {
+            const messageDiv = document.getElementById('ppiMessage');
+            messageDiv.textContent = message;
+            messageDiv.className = isError ? 'error-message' : 'loading-message';
+            messageDiv.style.display = 'block';
+        }
+
+        // --- Updated Data Fetching Function ---
+        // Fetches data from YOUR backend, which proxies the request to FRED
+        async function fetchMacroData(indicator, limit = 24) {
+            // Construct the URL to YOUR backend API endpoint
+            const url = `${API_BASE_URL}/api/macro/${indicator}?limit=${limit}`;
+            try {
+                console.log(`Fetching ${indicator} data from backend:`, url);
+                const response = await fetch(url);
+                if (!response.ok) {
+                    // Try to get error details from the response body if possible
+                    let errorMsg = `Backend API request failed (${response.status}): ${response.statusText}`;
+                    try {
+                        const errorData = await response.json();
+                        if (errorData.detail) {
+                            errorMsg = `Backend Error (${response.status}): ${errorData.detail}`;
+                        }
+                    } catch (e) {
+                        // If parsing error details fails, use the default message
+                        console.warn("Could not parse error details from backend response:", e);
+                    }
+                    throw new Error(errorMsg);
+                }
+                const data = await response.json();
+                console.log(`Successfully fetched ${indicator} data from backend:`, data);
+                // Return the observations array from your backend's response
+                if (!data.data) {
+                     throw new Error("Invalid data structure received from backend API.");
+                }
+                // Sort by date ascending for charting (your backend might already do this)
+                return data.data.sort((a, b) => new Date(a.date) - new Date(b.date));
+            } catch (error) {
+                console.error(`Error fetching data for ${indicator} from backend:`, error);
+                throw error; // Re-throw to handle in caller
+            }
+        }
+        // --- End Updated Data Fetching Function ---
+
+        function processDataForChart(observations) {
+             const labels = [];
+             const dataPoints = [];
+             observations.forEach(obs => {
+                 // Only include valid numerical values
+                 // FRED uses "." to indicate missing values
+                 if (obs.value !== "." && obs.value !== "" && !isNaN(parseFloat(obs.value))) {
+                     labels.push(obs.date);
+                     dataPoints.push(parseFloat(obs.value));
+                 } else {
+                     // Optional: Log or handle missing data points if needed
+                     // console.log("Skipping observation with missing or invalid value:", obs);
+                 }
+             });
+             return { labels, dataPoints };
+        }
+
+        function createChart(canvasId, labels, dataPoints, label, borderColor, backgroundColor) {
+             const ctx = document.getElementById(canvasId).getContext('2d');
+             // Destroy existing chart instance if it exists to prevent canvas overlap issues
+             if (window[canvasId + 'Instance']) {
+                 window[canvasId + 'Instance'].destroy();
+             }
+             window[canvasId + 'Instance'] = new Chart(ctx, {
+                 type: 'line',
+                 data: {
+                     labels: labels,
+                     datasets: [{
+                         label: label,
+                         data: dataPoints,
+                         borderColor: borderColor,
+                         backgroundColor: backgroundColor,
+                         borderWidth: 2,
+                         fill: false,
+                         pointRadius: 3,
+                         pointHoverRadius: 5,
+                         tension: 0.1 // Smooth lines slightly
+                     }]
+                 },
+                 options: {
+                     responsive: true,
+                     maintainAspectRatio: false,
+                     plugins: {
+                         legend: {
+                             display: true,
+                             position: 'top',
+                         },
+                         tooltip: {
+                             mode: 'index',
+                             intersect: false,
+                             callbacks: {
+                                 // Optionally format the date in the tooltip
+                                 title: function(tooltipItems) {
+                                     // Assuming labels are in 'YYYY-MM-DD' format
+                                     return tooltipItems[0].label; // You could format this further if needed
+                                 }
+                             }
+                         }
+                     },
+                     scales: {
+                         x: {
+                             // Chart.js 3+ uses 'category' by default for string labels.
+                             // If you add chartjs-adapter-date-fns, you can use type: 'time' for better axis handling.
+                             title: {
+                                 display: true,
+                                 text: 'Date'
+                             },
+                             ticks: {
+                                 // Limit the number of ticks displayed to prevent crowding
+                                 maxRotation: 45,
+                                 minRotation: 45,
+                                 autoSkip: true,
+                                 maxTicksLimit: 10 // Adjust based on your data frequency
+                             }
+                         },
+                         y: {
+                             title: {
+                                 display: true,
+                                 text: 'Index Value'
+                             }
+                         }
+                     }
+                 }
+             });
+        }
+
+
+        // --- Main Initialization ---
+        window.onload = async function() {
+            // --- Load CPI Chart ---
+            try {
+                showCpiMessage("Loading CPI data...");
+                // Use the new proxy function with the 'cpi' identifier
+                const cpiData = await fetchMacroData('cpi'); // Changed function name and parameter
+                const { labels: cpiLabels, dataPoints: cpiValues } = processDataForChart(cpiData);
+                if (cpiLabels.length > 0 && cpiValues.length > 0) {
+                    createChart('cpiChart', cpiLabels, cpiValues, 'CPI (All Urban Consumers)', '#3498db', 'rgba(52, 152, 219, 0.1)');
+                    document.getElementById('cpiMessage').style.display = 'none'; // Hide message on success
+                } else {
+                     showCpiMessage("No valid CPI data available to display.", true);
+                }
+            } catch (error) {
+                // Improved error message
+                showCpiMessage(`❌ Error loading CPI  ${error.message}`, true);
+            }
+
+            // --- Load PPI Chart ---
+            try {
+                showPpiMessage("Loading PPI data...");
+                // Use the new proxy function with the 'ppi' identifier
+                const ppiData = await fetchMacroData('ppi'); // Changed function name and parameter
+                const { labels: ppiLabels, dataPoints: ppiValues } = processDataForChart(ppiData);
+                if (ppiLabels.length > 0 && ppiValues.length > 0) {
+                   createChart('ppiChart', ppiLabels, ppiValues, 'PPI (All Commodities)', '#2ecc71', 'rgba(46, 204, 113, 0.1)');
+                   document.getElementById('ppiMessage').style.display = 'none'; // Hide message on success
+                } else {
+                     showPpiMessage("No valid PPI data available to display.", true);
+                }
+            } catch (error) {
+                // Improved error message
+                showPpiMessage(`❌ Error loading PPI  ${error.message}`, true);
+            }
+        };
+    </script>
+</body>
+</html>
