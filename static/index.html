@@ -3,7 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>P.R.O.P.H.E.T - Swing Predictor</title> <!-- Updated Title -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline';">
+    <title>P.R.O.P.H.E.T - Swing Predictor</title>
     <style>
         :root {
             --primary-color: #2c3e50;
@@ -190,23 +192,38 @@
             color: #6c757d;
             margin-top: 5px;
         }
+        /* --- Rate Limit Warning --- */
+        .rate-limit-warning {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            display: none;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <!-- Updated Header with Navigation -->
         <header>
-            <h1>🔮 P.R.O.P.H.E.T - Market Swing Predictor</h1> <!-- Updated H1 -->
+            <h1>🔮 P.R.O.P.H.E.T - Market Swing Predictor</h1>
             <nav>
                 <a href="index.html">Predictor</a>
-                <a href="about.html">About</a> <!-- Link to About Page -->
+                <a href="about.html">About</a>
             </nav>
         </header>
+
+        <!-- Rate Limit Warning -->
+        <div id="rateLimitWarning" class="rate-limit-warning">
+            ⚠️ Rate limit exceeded. Please wait a moment before making another request.
+        </div>
 
         <div class="controls">
             <!-- Auto-suggest input structure -->
             <div class="autocomplete">
-                <input type="text" id="symbolInput" placeholder="Search for an asset (e.g., BTCUSDT)...">
+                <input type="text" id="symbolInput" placeholder="Search for an asset (e.g., BTCUSDT)..." maxlength="20">
                 <div id="symbolDropdown" class="autocomplete-items"></div>
             </div>
             <button id="predictButton" onclick="fetchPrediction()" disabled>Get Prediction</button>
@@ -224,8 +241,16 @@
 
         let symbolsList = [];
         let countdownInterval;
+        let requestCount = 0;
+        const MAX_REQUESTS_PER_MINUTE = 8; // Conservative limit
+        const REQUEST_RESET_TIME = 60000; // 1 minute
 
-        // --- Utility Functions (Unchanged) ---
+        // Reset request count every minute
+        setInterval(() => {
+            requestCount = 0;
+        }, REQUEST_RESET_TIME);
+
+        // --- Utility Functions ---
         function showResult(message, type = 'info') {
             const resultsDiv = document.getElementById('results');
             resultsDiv.innerHTML = `<div class="message ${type}">${message}</div>`;
@@ -235,7 +260,15 @@
             document.getElementById('results').innerHTML = '';
         }
 
-        // --- Auto-Suggest Functions (Unchanged) ---
+        function showRateLimitWarning() {
+            const warningDiv = document.getElementById('rateLimitWarning');
+            warningDiv.style.display = 'block';
+            setTimeout(() => {
+                warningDiv.style.display = 'none';
+            }, 5000);
+        }
+
+        // --- Auto-Suggest Functions ---
         function initAutocomplete() {
             const input = document.getElementById("symbolInput");
             const dropdown = document.getElementById("symbolDropdown");
@@ -246,8 +279,7 @@
                 if (!val) { return false; }
                 let matches = 0;
                 symbolsList.forEach(symbol => {
-                    if (symbol.toUpperCase().includes(val)) {
-                        if (matches >= 10) return; // Limit to 10 suggestions
+                    if (symbol.toUpperCase().includes(val) && matches < 10) {
                         matches++;
                         const item = document.createElement("DIV");
                         item.innerHTML = `<strong>${symbol.substr(0, val.length)}</strong>${symbol.substr(val.length)}`;
@@ -314,12 +346,16 @@
         let currentFocus = -1;
         // --- END: Auto-Suggest Functions ---
 
-        // --- Main Functions (Unchanged, except for console.log update) ---
+        // --- Main Functions ---
         window.onload = async function() {
             try {
                 showResult('Loading available assets...', 'loading');
                 const response = await fetch(`${API_BASE_URL}/api/symbols`);
                 if (!response.ok) {
+                    if (response.status === 429) {
+                        showRateLimitWarning();
+                        throw new Error('Too many requests. Please try again later.');
+                    }
                     const errorData = await response.text();
                     throw new Error(`Failed to load symbols (${response.status}): ${errorData}`);
                 }
@@ -335,14 +371,23 @@
         };
 
         async function fetchPrediction() {
+            // Client-side rate limiting
+            if (requestCount >= MAX_REQUESTS_PER_MINUTE) {
+                showRateLimitWarning();
+                return;
+            }
+            requestCount++;
+
             let symbol = document.getElementById('symbolInput').value.trim().toUpperCase();
             if (!symbol) {
                 showResult('⚠️ Please enter or select an asset.', 'error');
                 return;
             }
-            const symbolRegex = /^[A-Z0-9]+$/;
+            
+            // Enhanced client-side validation
+            const symbolRegex = /^[A-Z0-9]{3,20}$/;
             if (!symbolRegex.test(symbol)) {
-                 showResult('⚠️ Please enter a valid asset symbol (e.g., BTCUSDT).', 'error');
+                 showResult('⚠️ Please enter a valid asset symbol (e.g., BTCUSDT). Must be 3-20 alphanumeric characters.', 'error');
                  return;
             }
 
@@ -356,13 +401,17 @@
                      response = await fetch(`${API_BASE_URL}/api/predict/${symbol}`);
                 }
                 if (!response.ok) {
+                    if (response.status === 429) {
+                        showRateLimitWarning();
+                        throw new Error('Too many requests. Please try again later.');
+                    }
                     const errorData = await response.text();
                     throw new Error(`API request failed (${response.status}): ${errorData}`);
                 }
                 const data = await response.json();
                 displayResults(data);
             } catch (error) {
-                console.error("Prediction fetch error:", error); // Updated console log
+                console.error("Prediction fetch error:", error);
                 showResult(`❌ Error fetching prediction for ${symbol}: ${error.message}`, 'error');
             } finally {
                 document.getElementById('predictButton').disabled = false;
@@ -443,6 +492,10 @@
             try {
                 const response = await fetch(`${API_BASE_URL}/api/next_run_time`);
                 if (!response.ok) {
+                    if (response.status === 429) {
+                        // Don't show rate limit warning for countdown - it's less critical
+                        return;
+                    }
                     const errorData = await response.text();
                     throw new Error(`Failed to fetch next run time (${response.status}): ${errorData}`);
                 }
@@ -457,12 +510,10 @@
                         updateCountdown(nextRunTime);
                     }, 1000);
                 } else {
-                    // UPDATED TEXT
                     document.getElementById('countdown').textContent = "Next Prediction Update: Not Scheduled";
                 }
             } catch (error) {
                 console.error("Failed to fetch next run time:", error);
-                // UPDATED TEXT
                 document.getElementById('countdown').textContent = `Next Prediction Update: Error - ${error.message.substring(0, 50)}...`;
             }
         }
@@ -472,7 +523,6 @@
             const diff = nextRunTime - now;
 
             if (diff <= 0) {
-                // UPDATED TEXT
                 document.getElementById('countdown').textContent = "Next Prediction Update: In Progress or Just Finished...";
                 if (countdownInterval) {
                     clearInterval(countdownInterval);
@@ -488,7 +538,6 @@
             const seconds = totalSeconds % 60;
 
             const formattedTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
-            // UPDATED TEXT
             document.getElementById('countdown').textContent = `Next Prediction Update: ${formattedTime}`;
         }
         // --- END UPDATED COUNTDOWN LOGIC ---

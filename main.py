@@ -6,14 +6,21 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timezone
 import asyncio
+import re
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
 from typing import List, Dict, Any
 import logging
 import os
 import requests
+
+# Import for rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 
 # 1. Import our bot engine
 from bot_engine import MTFProphetBot 
@@ -29,16 +36,41 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# --- 4. Configure CORS ---
+# --- Rate Limiting Setup ---
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# --- Security Headers Middleware ---
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+        response.headers['X-Frame-Options'] = 'DENY'
+        response.headers['X-XSS-Protection'] = '1; mode=block'
+        response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# --- 4. Configure CORS (Hardened) ---
+# Get allowed origins from environment variable, default to localhost for development
+allowed_origins = os.getenv('ALLOWED_ORIGINS', 'http://localhost:8000,http://127.0.0.1:8000').split(',')
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allowed_origins,  # Restricted origins
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET"],  # Only allow GET methods
     allow_headers=["*"],
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# --- Configuration from environment variables ---
+API_TIMEOUT = int(os.getenv('API_TIMEOUT', '10'))
+MAX_SYMBOL_LENGTH = int(os.getenv('MAX_SYMBOL_LENGTH', '20'))
+BINANCE_API_BASE_URL = os.getenv('BINANCE_API_BASE_URL', 'https://api.binance.com')
 
 # --- 5. In-memory storage for predictions and scheduler state ---
 latest_predictions_store: Dict[str, Dict[str, Any]] = {}
@@ -77,7 +109,8 @@ async def run_scheduled_predictions():
 
 # --- NEW: 8. API Endpoint to get Next Run Time ---
 @app.get("/api/next_run_time")
-async def get_next_run_time():
+@limiter.limit("30/minute")  # Rate limit for this endpoint
+async def get_next_run_time(request: Request):
     """
     Returns the ISO format timestamp of the next scheduled run.
     Used by the frontend for the countdown timer.
@@ -89,19 +122,28 @@ async def get_next_run_time():
         # If scheduler hasn't started or job not found, return a default
         return {"next_run_time_iso": None, "message": "Scheduler not active or time not set yet."}
 
-
-# --- API Endpoints (Existing, slightly modified) ---
+# --- API Endpoints (Existing, with security improvements) ---
 
 @app.get("/")
 async def read_root():
     return {"message": "Welcome to the Prophet Bot API!", "status": "Operational"}
 
 @app.get("/api/symbols", response_model=List[str])
-async def get_symbols():
+@limiter.limit("15/minute")  # Rate limit for symbol fetching
+async def get_symbols(request: Request):
     logger.info("Fetching symbols from Binance...")
-    url = "https://api.binance.com/api/v3/exchangeInfo"
+    url = f"{BINANCE_API_BASE_URL}/api/v3/exchangeInfo"
+    headers = {
+        'User-Agent': 'MTFProphetBot/1.0'
+    }
+    
     try:
-        response = requests.get(url, timeout=10)
+        response = requests.get(
+            url, 
+            timeout=(5, API_TIMEOUT), 
+            headers=headers,
+            verify=True
+        )
         response.raise_for_status()
         data = response.json()
         symbols = [
@@ -123,15 +165,28 @@ async def get_symbols():
         raise HTTPException(status_code=500, detail="Error processing Binance API response: Missing expected key")
     except Exception as e:
         logger.error(f"Unexpected error fetching/processing symbols from Binance: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+        raise HTTPException(status_code=500, detail="Service temporarily unavailable.")
 
 @app.get("/api/predict/{symbol}", response_model=Dict[str, Any])
-async def predict_symbol(symbol: str):
-    symbol = symbol.upper()
+@limiter.limit("10/minute")  # Rate limit for predictions
+async def predict_symbol(request: Request, symbol: str):
+    symbol = symbol.upper().strip()
     logger.info(f"Received prediction request for symbol: {symbol}")
     
+    # Enhanced input validation
     if not symbol or not isinstance(symbol, str):
-         raise HTTPException(status_code=400, detail="Invalid symbol provided.")
+        raise HTTPException(status_code=400, detail="Invalid symbol provided.")
+    
+    # Length validation
+    if len(symbol) > MAX_SYMBOL_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Symbol too long. Maximum {MAX_SYMBOL_LENGTH} characters.")
+    
+    if len(symbol) < 3:
+        raise HTTPException(status_code=400, detail="Symbol too short. Minimum 3 characters.")
+    
+    # Format validation (alphanumeric, typically uppercase)
+    if not re.match(r'^[A-Z0-9]{3,20}$', symbol):
+        raise HTTPException(status_code=400, detail="Invalid symbol format. Must be 3-20 alphanumeric characters.")
     
     try:
         bot = MTFProphetBot(symbol=symbol, intervals=['1d', '1h'], limit=100)
@@ -147,13 +202,32 @@ async def predict_symbol(symbol: str):
             "predictions": predictions,
             "status": "success"
         }
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions
     except Exception as e:
-        logger.error(f"Error during prediction for {symbol}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Prediction failed for {symbol}: {str(e)}")
+        logger.error(f"Prediction failed for {symbol}: {str(e)}", exc_info=True)  # Log full error
+        raise HTTPException(status_code=500, detail="Prediction service temporarily unavailable.")  # Generic message
 
 @app.get("/api/latest/{symbol}", response_model=Dict[str, Any])
-async def get_latest_prediction(symbol: str):
-    symbol = symbol.upper()
+@limiter.limit("20/minute")  # Rate limit for latest predictions
+async def get_latest_prediction(request: Request, symbol: str):
+    symbol = symbol.upper().strip()
+    
+    # Enhanced input validation for latest prediction endpoint
+    if not symbol or not isinstance(symbol, str):
+        raise HTTPException(status_code=400, detail="Invalid symbol provided.")
+    
+    # Length validation
+    if len(symbol) > MAX_SYMBOL_LENGTH:
+        raise HTTPException(status_code=400, detail=f"Symbol too long. Maximum {MAX_SYMBOL_LENGTH} characters.")
+    
+    if len(symbol) < 3:
+        raise HTTPException(status_code=400, detail="Symbol too short. Minimum 3 characters.")
+    
+    # Format validation
+    if not re.match(r'^[A-Z0-9]{3,20}$', symbol):
+        raise HTTPException(status_code=400, detail="Invalid symbol format. Must be 3-20 alphanumeric characters.")
+    
     if symbol in latest_predictions_store:
         return {
             "symbol": symbol,
