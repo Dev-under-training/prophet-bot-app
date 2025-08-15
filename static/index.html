@@ -508,7 +508,7 @@
                     if (countdownInterval) clearInterval(countdownInterval);
                     countdownInterval = setInterval(() => {
                         updateCountdown(nextRunTime);
-                    }, 1000);
+                    }, 2500);
                 } else {
                     document.getElementById('countdown').textContent = "Next Prediction Update: Not Scheduled";
                 }
