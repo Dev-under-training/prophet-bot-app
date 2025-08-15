@@ -311,7 +311,7 @@ async def get_macro_data(request: Request, indicator: str, limit: int = 24):
 # --- END NEW Macro Data Endpoints ---
 
 # --- NEW: FED News Endpoint ---
-FED_RSS_URL = "https://www.federalreserve.gov/feeds/press_all.xml"
+FED_RSS_URL = "https://libertystreeteconomics.newyorkfed.org/feed/"
 
 @app.get("/api/news/fed", response_model=List[Dict[str, Any]])
 @limiter.limit("30/minute") # Rate limit for news fetching
