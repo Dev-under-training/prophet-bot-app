@@ -15,6 +15,7 @@ from typing import List, Dict, Any
 import logging
 import os
 import requests
+import xml.etree.ElementTree as ET # Added import for XML parsing
 
 # Import for rate limiting
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -307,6 +308,106 @@ async def get_macro_data(request: Request, indicator: str, limit: int = 24):
         logger.error(f"Unexpected error fetching/processing FRED data for {indicator}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 # --- END NEW Macro Data Endpoints ---
+
+# --- NEW: FED News Endpoint ---
+FED_RSS_URL = "https://www.federalreserve.gov/feeds/press_all.xml"
+
+@app.get("/api/news/fed", response_model=List[Dict[str, Any]])
+@limiter.limit("30/minute") # Rate limit for news fetching
+async def get_fed_news(request: Request, limit: int = 10):
+    """
+    Fetches and parses the latest news/items from the Federal Reserve's RSS feed.
+    Returns a list of news items with title, link, description, publication date, and category.
+    """
+    logger.info(f"Fetching FED news from RSS feed (limit: {limit})")
+    
+    try:
+        # Fetch the RSS feed content
+        logger.info(f"Making request to FED RSS feed: {FED_RSS_URL}")
+        response = requests.get(FED_RSS_URL, timeout=(5, API_TIMEOUT), verify=True)
+        response.raise_for_status() # Raise an exception for bad status codes (4xx, 5xx)
+        
+        # Get the raw XML text
+        rss_content = response.text
+        logger.debug(f"Received RSS content (length: {len(rss_content)} chars)")
+        
+        # Parse the XML content
+        root = ET.fromstring(rss_content)
+        
+        # Define the namespace used in the RSS feed
+        namespaces = {
+            'atom': 'http://www.w3.org/2005/Atom', # Atom namespace, if needed
+            # The base namespace for RSS is usually the default one, often no prefix needed for common elements
+            # But let's check the structure. Based on standard RSS 2.0, items are usually direct children of <channel>
+        }
+        
+        # Find the <channel> element (root is usually <rss>)
+        channel = root.find('channel')
+        if channel is None:
+            logger.error("Could not find <channel> element in RSS feed")
+            raise HTTPException(status_code=502, detail="Bad gateway: Invalid RSS structure from FED")
+            
+        # Find all <item> elements within the channel
+        items = channel.findall('item')
+        logger.info(f"Found {len(items)} items in RSS feed")
+        
+        news_items = []
+        for item in items[:limit]: # Only process up to 'limit' items
+            try:
+                # Extract data from each <item>
+                title_elem = item.find('title')
+                title = title_elem.text if title_elem is not None else "No Title"
+                
+                link_elem = item.find('link')
+                link = link_elem.text if link_elem is not None else "#"
+                
+                description_elem = item.find('description')
+                description = description_elem.text if description_elem is not None else ""
+                
+                pub_date_elem = item.find('pubDate')
+                pub_date_str = pub_date_elem.text if pub_date_elem is not None else ""
+                
+                # Category can be multiple, we'll join them
+                category_elems = item.findall('category')
+                categories = [cat.text for cat in category_elems if cat.text] if category_elems else []
+                category_str = ", ".join(categories) if categories else "General"
+                
+                # You might also want to extract the <guid> if it's useful
+                guid_elem = item.find('guid')
+                guid = guid_elem.text if guid_elem is not None else link # Fallback to link
+                
+                news_item = {
+                    "title": title.strip() if title else "No Title",
+                    "link": link.strip() if link else "#",
+                    "description": description.strip() if description else "",
+                    "pub_date": pub_date_str.strip() if pub_date_str else "",
+                    "categories": categories, # Return list of categories
+                    "category_str": category_str, # Return joined string
+                    "guid": guid.strip() if guid else link
+                }
+                news_items.append(news_item)
+                
+            except Exception as item_error:
+                logger.warning(f"Error processing individual RSS item: {item_error}")
+                # Continue processing other items even if one fails
+                continue
+                
+        logger.info(f"Successfully processed {len(news_items)} FED news items")
+        return news_items
+        
+    except requests.exceptions.Timeout:
+        logger.error("Request to FED RSS feed timed out")
+        raise HTTPException(status_code=504, detail="Request to FED RSS feed timed out.")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching FED RSS feed: {e}")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch FED RSS feed: {str(e)}")
+    except ET.ParseError as e:
+        logger.error(f"Error parsing FED RSS XML: {e}")
+        raise HTTPException(status_code=502, detail="Bad gateway: Invalid XML response from FED RSS feed")
+    except Exception as e:
+        logger.error(f"Unexpected error fetching/processing FED news: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+# --- END NEW: FED News Endpoint ---
 
 # --- NEW: 9. Startup and Shutdown Events for Scheduler ---
 @app.on_event("startup")
