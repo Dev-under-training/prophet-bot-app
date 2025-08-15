@@ -56,7 +56,7 @@
             text-decoration: underline;
         }
         /* --- End Updated Header Style --- */
-        
+
         .controls {
             display: flex;
             flex-wrap: wrap;
@@ -64,8 +64,8 @@
             margin-bottom: 20px;
             align-items: center;
         }
-        
-        /* --- Styles for Auto-Suggest (Unchanged) --- */
+
+        /* --- Styles for Auto-Suggest --- */
         .autocomplete {
             position: relative;
             flex-grow: 1;
@@ -129,7 +129,7 @@
             background-color: #bdc3c7;
             cursor: not-allowed;
         }
-        /* --- UPDATED COUNTDOWN TEXT --- */
+        /* --- Countdown Text --- */
         #countdown {
             font-weight: bold;
             color: var(--secondary-color);
@@ -140,13 +140,14 @@
             border-radius: 4px;
             background-color: #e3f2fd;
         }
-        /* --- END UPDATED COUNTDOWN TEXT --- */
+        /* --- END Countdown Text --- */
         #results {
             margin-top: 20px;
         }
         .message {
             padding: 15px;
-            border-radius: 4px;
+            border-radius: 6px; /* Slightly rounder */
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1); /* Subtle shadow */
             margin-bottom: 15px;
         }
         .loading {
@@ -164,35 +165,96 @@
             color: #155724;
             border: 1px solid #c3e6cb;
         }
+        /* --- Enhanced Results Display --- */
+        .prediction-results-container {
+            /* Add padding if needed */
+        }
         .prediction-section {
-            margin-bottom: 20px;
+            margin-bottom: 25px; /* Slightly more space */
+            border: 1px solid #eee;
+            border-radius: 5px;
+            padding: 15px;
+            background-color: #fafafa;
         }
         .prediction-section h3 {
             margin-top: 0;
             color: var(--primary-color);
-            border-bottom: 1px solid #eee;
-            padding-bottom: 5px;
+            border-bottom: 1px solid #ddd;
+            padding-bottom: 8px;
+            margin-bottom: 15px;
         }
         .prediction-list {
             list-style: none;
             padding: 0;
+            margin: 0;
         }
         .prediction-item {
-            background-color: #f8f9fa;
-            border: 1px solid #e9ecef;
-            border-radius: 4px;
-            padding: 12px;
+            background-color: #ffffff;
+            border: 1px solid #e0e0e0;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 12px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: box-shadow 0.2s ease;
+        }
+        .prediction-item:hover {
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .prediction-main {
             margin-bottom: 8px;
         }
-        .prediction-item strong {
-            color: var(--primary-color);
-        }
-        .timestamp {
+        .prediction-details {
             font-size: 0.9em;
-            color: #6c757d;
-            margin-top: 5px;
+            color: #555;
         }
-        /* --- Rate Limit Warning --- */
+        .no-predictions-message {
+            text-align: center;
+            color: #666;
+            font-style: italic;
+            padding: 15px;
+            background-color: #f9f9f9;
+            border-radius: 4px;
+        }
+
+        /* --- Score Styling --- */
+        .score-display {
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-weight: bold;
+        }
+        .score-desc {
+            font-size: 0.85em;
+            color: #666;
+        }
+        .score-very-high {
+            background-color: #d4edda; /* Light green */
+            color: #155724;
+        }
+        .score-high {
+            background-color: #cce7ff; /* Light blue */
+            color: #004085;
+        }
+        .score-medium {
+            background-color: #fff3cd; /* Light yellow */
+            color: #856404;
+        }
+        .score-low {
+            background-color: #f8d7da; /* Light red */
+            color: #721c24;
+        }
+        /* --- END Score Styling --- */
+
+        .timestamp {
+            font-size: 0.95em; /* Slightly larger */
+            color: #495057; /* Slightly darker */
+            margin-top: 8px;
+            padding: 8px 12px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
+        /* --- Enhanced Rate Limit Warning --- */
         .rate-limit-warning {
             background-color: #fff3cd;
             color: #856404;
@@ -201,7 +263,34 @@
             border-radius: 4px;
             margin: 10px 0;
             display: none;
+            font-weight: bold;
+            text-align: center;
         }
+
+        /* --- Responsive Improvements --- */
+        @media (max-width: 600px) {
+            .container {
+                padding: 15px; /* Less padding on small screens */
+            }
+            .controls {
+                flex-direction: column; /* Stack controls on small screens */
+                align-items: stretch;
+            }
+            #symbolInput, .autocomplete {
+                width: 100%;
+                margin-bottom: 10px;
+            }
+            #predictButton {
+                width: 100%;
+            }
+            .prediction-item {
+                padding: 12px;
+            }
+            .prediction-main, .prediction-details {
+                font-size: 0.95em; /* Slightly smaller text */
+            }
+        }
+        /* --- End UI/UX Enhancements CSS --- */
     </style>
 </head>
 <body>
@@ -229,7 +318,7 @@
             <button id="predictButton" onclick="fetchPrediction()" disabled>Get Prediction</button>
         </div>
 
-        <!-- UPDATED DEFAULT COUNTDOWN TEXT -->
+        <!-- Countdown Text -->
         <div id="countdown">Next Prediction Update: Loading...</div>
 
         <div id="results"></div>
@@ -244,6 +333,11 @@
         let requestCount = 0;
         const MAX_REQUESTS_PER_MINUTE = 8; // Conservative limit
         const REQUEST_RESET_TIME = 60000; // 1 minute
+
+        // --- Rate Limit Retry Logic for Countdown ---
+        let countdownRetryAttempts = 0;
+        const MAX_COUNTDOWN_RETRIES = 3;
+        const COUNTDOWN_RETRY_DELAY = 30000; // 30 seconds
 
         // Reset request count every minute
         setInterval(() => {
@@ -260,12 +354,14 @@
             document.getElementById('results').innerHTML = '';
         }
 
-        function showRateLimitWarning() {
+        function showRateLimitWarning(customMessage = null) {
             const warningDiv = document.getElementById('rateLimitWarning');
+            const defaultMessage = '⚠️ Rate limit exceeded. Please wait a moment before making another request.';
+            warningDiv.textContent = customMessage || defaultMessage;
             warningDiv.style.display = 'block';
             setTimeout(() => {
                 warningDiv.style.display = 'none';
-            }, 5000);
+            }, 5000); // Hide after 5 seconds
         }
 
         // --- Auto-Suggest Functions ---
@@ -367,13 +463,13 @@
                 console.error("Error loading symbols:", error);
                 showResult(`❌ Error loading symbols: ${error.message}`, 'error');
             }
-            startCountdown();
+            startCountdown(); // Start countdown after symbols are loaded
         };
 
         async function fetchPrediction() {
-            // Client-side rate limiting
+            // Client-side rate limiting check
             if (requestCount >= MAX_REQUESTS_PER_MINUTE) {
-                showRateLimitWarning();
+                showRateLimitWarning(); // Use the improved warning
                 return;
             }
             requestCount++;
@@ -383,12 +479,11 @@
                 showResult('⚠️ Please enter or select an asset.', 'error');
                 return;
             }
-            
-            // Enhanced client-side validation
+
             const symbolRegex = /^[A-Z0-9]{3,20}$/;
             if (!symbolRegex.test(symbol)) {
-                 showResult('⚠️ Please enter a valid asset symbol (e.g., BTCUSDT). Must be 3-20 alphanumeric characters.', 'error');
-                 return;
+                showResult('⚠️ Please enter a valid asset symbol (e.g., BTCUSDT). Must be 3-20 alphanumeric characters.', 'error');
+                return;
             }
 
             showResult('🔍 Fetching latest prediction...', 'loading');
@@ -397,12 +492,13 @@
             try {
                 let response = await fetch(`${API_BASE_URL}/api/latest/${symbol}`);
                 if (response.status === 404) {
-                     showResult('⚙️ Running market analysis (this may take 10-30 seconds)...', 'loading');
-                     response = await fetch(`${API_BASE_URL}/api/predict/${symbol}`);
+                    showResult('⚙️ Running market analysis (this may take 10-30 seconds)...', 'loading');
+                    response = await fetch(`${API_BASE_URL}/api/predict/${symbol}`);
                 }
                 if (!response.ok) {
                     if (response.status === 429) {
-                        showRateLimitWarning();
+                        // Specific handling for rate limit on prediction endpoints
+                        showRateLimitWarning("⚠️ Too many prediction requests. Please wait before trying again.");
                         throw new Error('Too many requests. Please try again later.');
                     }
                     const errorData = await response.text();
@@ -412,18 +508,26 @@
                 displayResults(data);
             } catch (error) {
                 console.error("Prediction fetch error:", error);
-                showResult(`❌ Error fetching prediction for ${symbol}: ${error.message}`, 'error');
+                // Differentiate error messages based on error type if possible
+                if (error.message.includes('Too many requests')) {
+                     // Message already shown by showRateLimitWarning
+                } else {
+                     showResult(`❌ Error fetching prediction for ${symbol}: ${error.message}`, 'error');
+                }
             } finally {
                 document.getElementById('predictButton').disabled = false;
             }
         }
 
+        // --- Enhanced Results Display ---
         function displayResults(data) {
             const resultsDiv = document.getElementById('results');
-            
+
+            // Helper function for formatting price levels
             const formatPriceLevel = function(price) {
                 const numPrice = parseFloat(price);
                 if (isNaN(numPrice)) return 'N/A';
+                // Adjust decimal places based on asset? For now, keep your logic
                 return numPrice.toLocaleString(undefined, {
                     minimumFractionDigits: 2,
                     maximumFractionDigits: 10,
@@ -431,11 +535,29 @@
                 });
             };
 
+            // Helper function for formatting scores
+            const getScoreDescription = function(score) {
+                if (score >= 10) return "Very High Confidence";
+                if (score >= 8) return "High Confidence";
+                if (score >= 6) return "Moderate Confidence";
+                if (score >= 4) return "Lower Confidence";
+                return "Low Confidence";
+            };
+
+            // Helper function for adding visual indicators to scores
+            const getScoreClass = function(score) {
+                if (score >= 10) return "score-very-high";
+                if (score >= 8) return "score-high";
+                if (score >= 6) return "score-medium";
+                return "score-low";
+            };
+
             if (data.status && (data.status.includes("success") || data.status.includes("cache"))) {
                 const predictions = data.predictions;
                 const symbol = data.symbol;
-                
-                let html = `<h2>Predictions for ${symbol}</h2>`;
+
+                let html = `<div class="prediction-results-container">`;
+                html += `<h2>Predictions for ${symbol}</h2>`;
                 if (predictions.timestamp_utc) {
                     const dateObj = new Date(predictions.timestamp_utc);
                     const formattedDate = dateObj.toLocaleString(undefined, {
@@ -445,40 +567,58 @@
                     });
                     html += `<p class="timestamp"><strong>🕒 Generated:</strong> ${formattedDate}</p>`;
                 }
-                
+
+                // --- Swing Highs Section ---
                 html += `<div class="prediction-section">`;
                 html += `<h3>📈 Potential Swing Highs (Next 3-7 Days)</h3>`;
                 if (predictions.swing_highs && predictions.swing_highs.length > 0) {
                     html += `<ul class="prediction-list">`;
-                    predictions.swing_highs.forEach((sh, index) => {
-                        html += `<li class="prediction-item">`;
-                        html += `<strong>Level:</strong> ${formatPriceLevel(sh.level)} `;
-                        html += `| <strong>Source:</strong> ${sh.source} `;
-                        html += `| <strong>Score:</strong> ${sh.score}`;
-                        html += `</li>`;
-                    });
+                    // Sort by score descending for display
+                    predictions.swing_highs
+                        .sort((a, b) => b.score - a.score)
+                        .forEach((sh, index) => {
+                            html += `<li class="prediction-item">`;
+                            html += `<div class="prediction-main">`;
+                            html += `<strong>Level:</strong> ${formatPriceLevel(sh.level)} `;
+                            html += `| <strong class="score-display ${getScoreClass(sh.score)}">Score:</strong> ${sh.score} <span class="score-desc">(${getScoreDescription(sh.score)})</span>`;
+                            html += `</div>`;
+                            html += `<div class="prediction-details">`;
+                            html += `<strong>Source:</strong> ${sh.source}`;
+                            html += `</div>`;
+                            html += `</li>`;
+                        });
                     html += `</ul>`;
                 } else {
-                    html += `<p>No significant Swing High predictions at this time.</p>`;
+                    html += `<div class="no-predictions-message"><p>No significant Swing High predictions at this time.</p></div>`;
                 }
-                html += `</div>`;
+                html += `</div>`; // End Swing Highs Section
 
+                // --- Swing Lows Section ---
                 html += `<div class="prediction-section">`;
                 html += `<h3>📉 Potential Swing Lows (Next 3-7 Days)</h3>`;
                 if (predictions.swing_lows && predictions.swing_lows.length > 0) {
                     html += `<ul class="prediction-list">`;
-                    predictions.swing_lows.forEach((sl, index) => {
-                        html += `<li class="prediction-item">`;
-                        html += `<strong>Level:</strong> ${formatPriceLevel(sl.level)} `;
-                        html += `| <strong>Source:</strong> ${sl.source} `;
-                        html += `| <strong>Score:</strong> ${sl.score}`;
-                        html += `</li>`;
-                    });
+                    // Sort by score descending for display
+                    predictions.swing_lows
+                        .sort((a, b) => b.score - a.score)
+                        .forEach((sl, index) => {
+                            html += `<li class="prediction-item">`;
+                            html += `<div class="prediction-main">`;
+                            html += `<strong>Level:</strong> ${formatPriceLevel(sl.level)} `;
+                            html += `| <strong class="score-display ${getScoreClass(sl.score)}">Score:</strong> ${sl.score} <span class="score-desc">(${getScoreDescription(sl.score)})</span>`;
+                            html += `</div>`;
+                            html += `<div class="prediction-details">`;
+                            html += `<strong>Source:</strong> ${sl.source}`;
+                            html += `</div>`;
+                            html += `</li>`;
+                        });
                     html += `</ul>`;
                 } else {
-                    html += `<p>No significant Swing Low predictions at this time.</p>`;
+                    html += `<div class="no-predictions-message"><p>No significant Swing Low predictions at this time.</p></div>`;
                 }
-                html += `</div>`;
+                html += `</div>`; // End Swing Lows Section
+
+                html += `</div>`; // End container
 
                 resultsDiv.innerHTML = `<div class="message success">${html}</div>`;
             } else {
@@ -486,26 +626,46 @@
                 showResult(`❓ Unexpected response structure from API.`, 'error');
             }
         }
+        // --- END Enhanced Results Display ---
 
-        // --- UPDATED COUNTDOWN LOGIC ---
+        // --- UPDATED COUNTDOWN LOGIC with Retry ---
         async function startCountdown() {
+            // Prevent excessive retries on persistent errors
+            if (countdownRetryAttempts > MAX_COUNTDOWN_RETRIES) {
+                document.getElementById('countdown').textContent = "Next Prediction Update: Temporarily Unavailable";
+                console.warn("Countdown update retries exhausted.");
+                return;
+            }
+
             try {
                 const response = await fetch(`${API_BASE_URL}/api/next_run_time`);
                 if (!response.ok) {
                     if (response.status === 429) {
-                        // Don't show rate limit warning for countdown - it's less critical
-                        return;
+                        // Server-side rate limit for countdown - this is expected if polling is too frequent
+                        // Even though we adjusted the interval, bursts or server restarts can cause this
+                        console.warn("Countdown endpoint rate limited. Retrying later.");
+                        document.getElementById('countdown').textContent = "Next Prediction Update: Refreshing...";
+                        countdownRetryAttempts++;
+                        setTimeout(startCountdown, COUNTDOWN_RETRY_DELAY); // Retry after a longer delay
+                        return; // Exit early, don't clear retry attempts yet
+                    } else if (response.status >= 500) {
+                        throw new Error(`Server error (${response.status})`);
+                    } else {
+                        const errorData = await response.text();
+                        throw new Error(`Failed to fetch next run time (${response.status}): ${errorData}`);
                     }
-                    const errorData = await response.text();
-                    throw new Error(`Failed to fetch next run time (${response.status}): ${errorData}`);
                 }
+                // Reset retry attempts on successful fetch
+                countdownRetryAttempts = 0;
+
                 const data = await response.json();
-                
+
                 if (data.next_run_time_iso) {
                     const nextRunTime = new Date(data.next_run_time_iso);
                     updateCountdown(nextRunTime);
-                    
+
                     if (countdownInterval) clearInterval(countdownInterval);
+                    // Poll every 2.5 seconds (as you already did)
                     countdownInterval = setInterval(() => {
                         updateCountdown(nextRunTime);
                     }, 2500);
@@ -514,7 +674,10 @@
                 }
             } catch (error) {
                 console.error("Failed to fetch next run time:", error);
-                document.getElementById('countdown').textContent = `Next Prediction Update: Error - ${error.message.substring(0, 50)}...`;
+                countdownRetryAttempts++;
+                document.getElementById('countdown').textContent = `Next Prediction Update: Error - Retrying...`;
+                // Retry after a delay on error
+                setTimeout(startCountdown, COUNTDOWN_RETRY_DELAY);
             }
         }
 
