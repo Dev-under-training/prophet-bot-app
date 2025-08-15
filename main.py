@@ -6,7 +6,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from datetime import datetime, timezone
 import asyncio
-import re
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -71,6 +70,11 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 API_TIMEOUT = int(os.getenv('API_TIMEOUT', '10'))
 MAX_SYMBOL_LENGTH = int(os.getenv('MAX_SYMBOL_LENGTH', '20'))
 BINANCE_API_BASE_URL = os.getenv('BINANCE_API_BASE_URL', 'https://api.binance.com')
+# --- FRED API Configuration ---
+# TODO: For production, use os.getenv("FRED_API_KEY") and set the environment variable
+FRED_API_KEY = "a67de105d456e8a7853a5fd60533ba53" # Use your actual key from testing
+FRED_BASE_URL = "https://api.stlouisfed.org/fred/series/observations"
+
 
 # --- 5. In-memory storage for predictions and scheduler state ---
 latest_predictions_store: Dict[str, Dict[str, Any]] = {}
@@ -121,6 +125,7 @@ async def get_next_run_time(request: Request):
     else:
         # If scheduler hasn't started or job not found, return a default
         return {"next_run_time_iso": None, "message": "Scheduler not active or time not set yet."}
+
 
 # --- API Endpoints (Existing, with security improvements) ---
 
@@ -236,6 +241,72 @@ async def get_latest_prediction(request: Request, symbol: str):
         }
     else:
         raise HTTPException(status_code=404, detail=f"No recent prediction found for {symbol}. Please trigger a new prediction via /api/predict/{symbol}.")
+
+# --- NEW: Macro Data Endpoints ---
+@app.get("/api/macro/{indicator}")
+@limiter.limit("60/minute") # Higher limit for macro data, as it's less frequent
+async def get_macro_data(request: Request, indicator: str, limit: int = 24):
+    """
+    Fetches macroeconomic data from FRED API via server-side proxy to avoid CORS.
+    Supported indicators: 'cpi', 'ppi'
+    """
+    logger.info(f"Fetching macro data for indicator: {indicator}")
+    
+    # Map simple names to FRED series IDs
+    series_map = {
+        "cpi": "CPIAUCSL",  # Consumer Price Index for All Urban Consumers: All Items in U.S. City Average
+        "ppi": "PPIACO"     # Producer Price Index for All Commodities
+    }
+    
+    series_id = series_map.get(indicator.lower())
+    if not series_id:
+        logger.warning(f"Unsupported macro indicator requested: {indicator}")
+        raise HTTPException(status_code=400, detail=f"Unsupported indicator: {indicator}. Supported: cpi, ppi")
+    
+    # Construct FRED API URL
+    # Note: file_type=json is important for parsing in Python
+    fred_url = f"{FRED_BASE_URL}?series_id={series_id}&api_key={FRED_API_KEY}&file_type=json&sort_order=desc&limit={limit}"
+    
+    try:
+        logger.info(f"Making request to FRED API: {fred_url}")
+        # Use requests to fetch data from FRED (server-side, no CORS issues)
+        response = requests.get(fred_url, timeout=(5, API_TIMEOUT), verify=True) # Reuse API_TIMEOUT from config
+        response.raise_for_status() # Raise an exception for bad status codes (4xx, 5xx)
+        
+        # Parse the JSON response from FRED
+        fred_data = response.json()
+        
+        # Basic validation
+        if "observations" not in fred_data:
+            logger.error(f"Unexpected response structure from FRED API for {indicator}")
+            raise HTTPException(status_code=502, detail="Bad gateway: Unexpected data format from FRED API")
+            
+        # Sort observations by date ascending for frontend charting
+        observations = sorted(fred_data["observations"], key=lambda obs: obs["date"])
+        
+        logger.info(f"Successfully fetched and processed {len(observations)} data points for {indicator}")
+        return {
+            "indicator": indicator.upper(),
+            "series_id": series_id,
+            "data": observations
+        }
+        
+    except requests.exceptions.Timeout:
+        logger.error(f"Request to FRED API timed out for {indicator}")
+        raise HTTPException(status_code=504, detail="Request to FRED API timed out.")
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error fetching data from FRED API for {indicator}: {e}")
+        # Provide a more user-friendly error message for common issues
+        if "Invalid API key" in str(e):
+            raise HTTPException(status_code=502, detail="Bad gateway: Invalid FRED API key configured on server.")
+        raise HTTPException(status_code=502, detail=f"Failed to fetch data from FRED API: {str(e)}")
+    except ValueError as e: # JSON decode error
+        logger.error(f"Error decoding JSON response from FRED API for {indicator}: {e}")
+        raise HTTPException(status_code=502, detail="Bad gateway: Invalid JSON response from FRED API")
+    except Exception as e:
+        logger.error(f"Unexpected error fetching/processing FRED data for {indicator}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
+# --- END NEW Macro Data Endpoints ---
 
 # --- NEW: 9. Startup and Shutdown Events for Scheduler ---
 @app.on_event("startup")
