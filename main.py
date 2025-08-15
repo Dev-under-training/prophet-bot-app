@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import List, Dict, Any
 import logging
+import traceback
 import os
 import requests
 import xml.etree.ElementTree as ET # Added import for XML parsing
@@ -331,24 +332,40 @@ async def get_fed_news(request: Request, limit: int = 10):
         rss_content = response.text
         logger.debug(f"Received RSS content (length: {len(rss_content)} chars)")
         
-        # Parse the XML content
-        root = ET.fromstring(rss_content)
+        # --- NEW: Log a snippet of the raw response for debugging ---
+        # This helps us see if we got HTML error page or malformed XML
+        snippet_length = min(500, len(rss_content))
+        logger.debug(f"Snippet of raw RSS response (first {snippet_length} chars): {rss_content[:snippet_length]}")
+        # --- END NEW ---
         
-        # Define the namespace used in the RSS feed
-        namespaces = {
-            'atom': 'http://www.w3.org/2005/Atom', # Atom namespace, if needed
-            # The base namespace for RSS is usually the default one, often no prefix needed for common elements
-            # But let's check the structure. Based on standard RSS 2.0, items are usually direct children of <channel>
-        }
+        # Check if content seems to be HTML (error page) instead of XML
+        if rss_content.strip().startswith("<!DOCTYPE html") or "<html" in rss_content[:200].lower():
+             logger.error("Received HTML response instead of XML. This might indicate an error page or blocking.")
+             raise HTTPException(status_code=502, detail="Bad gateway: FED server returned an HTML page, possibly an error or block.")
+        
+        # Check for empty content
+        if not rss_content.strip():
+            logger.error("Received empty response from FED RSS feed.")
+            raise HTTPException(status_code=502, detail="Bad gateway: FED server returned an empty response.")
+            
+        # Parse the XML content
+        logger.info("Attempting to parse RSS content as XML...")
+        root = ET.fromstring(rss_content)
+        logger.info("XML parsing successful.")
+        
+        # Define the namespace used in the RSS feed (if any become relevant later)
+        # namespaces = { ... } 
         
         # Find the <channel> element (root is usually <rss>)
-        channel = root.find('channel')
+        channel = root.find('channel') # Use default namespace
         if channel is None:
-            logger.error("Could not find <channel> element in RSS feed")
-            raise HTTPException(status_code=502, detail="Bad gateway: Invalid RSS structure from FED")
+            # Log more details about the root element found
+            logger.error(f"Could not find <channel> element in RSS feed. Root tag found: '{root.tag}'")
+            logger.debug(f"Full root element structure: {ET.tostring(root, encoding='unicode')[:500]}...")
+            raise HTTPException(status_code=502, detail="Bad gateway: Invalid RSS structure from FED - <channel> not found.")
             
         # Find all <item> elements within the channel
-        items = channel.findall('item')
+        items = channel.findall('item') # Use default namespace
         logger.info(f"Found {len(items)} items in RSS feed")
         
         news_items = []
@@ -361,18 +378,22 @@ async def get_fed_news(request: Request, limit: int = 10):
                 link_elem = item.find('link')
                 link = link_elem.text if link_elem is not None else "#"
                 
+                # Description might be in <description> or <content:encoded>
                 description_elem = item.find('description')
+                if description_elem is None:
+                    # Try common namespace for encoded content
+                    description_elem = item.find('{http://purl.org/rss/1.0/modules/content/}encoded')
+                
                 description = description_elem.text if description_elem is not None else ""
                 
                 pub_date_elem = item.find('pubDate')
                 pub_date_str = pub_date_elem.text if pub_date_elem is not None else ""
                 
-                # Category can be multiple, we'll join them
+                # Category can be multiple
                 category_elems = item.findall('category')
                 categories = [cat.text for cat in category_elems if cat.text] if category_elems else []
                 category_str = ", ".join(categories) if categories else "General"
                 
-                # You might also want to extract the <guid> if it's useful
                 guid_elem = item.find('guid')
                 guid = guid_elem.text if guid_elem is not None else link # Fallback to link
                 
@@ -381,14 +402,15 @@ async def get_fed_news(request: Request, limit: int = 10):
                     "link": link.strip() if link else "#",
                     "description": description.strip() if description else "",
                     "pub_date": pub_date_str.strip() if pub_date_str else "",
-                    "categories": categories, # Return list of categories
-                    "category_str": category_str, # Return joined string
+                    "categories": categories,
+                    "category_str": category_str,
                     "guid": guid.strip() if guid else link
                 }
                 news_items.append(news_item)
                 
             except Exception as item_error:
                 logger.warning(f"Error processing individual RSS item: {item_error}")
+                logger.debug(f"Traceback for item error: {traceback.format_exc()}")
                 # Continue processing other items even if one fails
                 continue
                 
@@ -403,9 +425,13 @@ async def get_fed_news(request: Request, limit: int = 10):
         raise HTTPException(status_code=502, detail=f"Failed to fetch FED RSS feed: {str(e)}")
     except ET.ParseError as e:
         logger.error(f"Error parsing FED RSS XML: {e}")
-        raise HTTPException(status_code=502, detail="Bad gateway: Invalid XML response from FED RSS feed")
+        # Log the traceback for more details on where parsing failed
+        logger.debug(f"XML Parse traceback: {traceback.format_exc()}")
+        raise HTTPException(status_code=502, detail="Bad gateway: Invalid XML response from FED RSS feed. Parsing failed.")
+    except HTTPException: # Re-raise HTTPExceptions we throw
+        raise
     except Exception as e:
-        logger.error(f"Unexpected error fetching/processing FED news: {e}", exc_info=True)
+        logger.error(f"Unexpected error fetching/processing FED news: {e}", exc_info=True) # exc_info logs the full traceback
         raise HTTPException(status_code=500, detail=f"An unexpected error occurred: {str(e)}")
 # --- END NEW: FED News Endpoint ---
 
